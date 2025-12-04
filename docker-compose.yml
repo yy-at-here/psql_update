@@ -3,7 +3,7 @@ services:
     image: "postgres:${POSTGRES_VERSION:-17}"
     container_name: local-postgres
     ports:
-      - "5432:5432"
+      - "15432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}

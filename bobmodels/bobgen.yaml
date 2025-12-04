@@ -1,0 +1,3 @@
+plugins_preset: "all"
+psql:
+  dsn: "postgres://postgres:postgres@localhost:15432/app_db?sslmode=disable"
