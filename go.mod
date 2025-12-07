@@ -7,10 +7,13 @@ require (
 	github.com/jaswdr/faker/v2 v2.9.0
 	github.com/lib/pq v1.10.9
 	github.com/shopspring/decimal v1.4.0
+	github.com/spf13/cobra v1.10.2
 	github.com/stephenafamo/bob v0.42.0
 )
 
 require (
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/qdm12/reprint v0.0.0-20200326205758-722754a53494 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/stephenafamo/scan v0.7.0 // indirect
 )
