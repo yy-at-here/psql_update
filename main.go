@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aarondl/opt/omit"
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
 	"github.com/stephenafamo/bob"
@@ -22,7 +21,7 @@ func main() {
 		},
 	}
 
-	rootCommand.Flags().StringVar(&mode, "mode", "without-tx", "Update mode: without-tx, with-tx, bulk")
+	rootCommand.Flags().StringVar(&mode, "mode", "without-tx", "Update mode: without-tx, with-tx, bulk, raw-sql-without-tx, raw-sql-with-tx")
 	if err := rootCommand.Execute(); err != nil {
 		panic(err)
 	}
@@ -68,6 +67,10 @@ func runScenario(ctx context.Context, name string, db bob.DB) Result {
 		err = updateWithMultiTx(benchmarkAccounts, db, ctx)
 	case "bulk":
 		err = bulkUpdate(benchmarkAccounts, db, ctx)
+	case "raw-sql-with-tx":
+		err = updateRawSQLWithTx(benchmarkAccounts, db, ctx)
+	case "raw-sql-without-tx":
+		err = updateRawSQLWithoutTx(benchmarkAccounts, db, ctx)
 	default:
 		panic("unknown mode: " + name)
 	}
@@ -77,64 +80,4 @@ func runScenario(ctx context.Context, name string, db bob.DB) Result {
 		Duration: time.Since(start),
 		Err:      err,
 	}
-}
-
-func updateWithoutTx(ba models.BenchmarkAccountSlice, db bob.DB, ctx context.Context) error {
-	setter := &models.BenchmarkAccountSetter{
-		Status: omit.From("active"),
-	}
-	for _, benchmarkAccount := range ba {
-		if err := benchmarkAccount.Update(ctx, db, setter); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func updateWithMultiTx(ba models.BenchmarkAccountSlice, db bob.DB, ctx context.Context) error {
-	setter := &models.BenchmarkAccountSetter{
-		Status: omit.From("active"),
-	}
-	for _, benchmarkAccount := range ba {
-		tx, err := db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		if err := benchmarkAccount.Update(ctx, tx, setter); err != nil {
-			return tx.Rollback(ctx)
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func updateWithTx(ba models.BenchmarkAccountSlice, db bob.DB, ctx context.Context) error {
-	setter := &models.BenchmarkAccountSetter{
-		Status: omit.From("active"),
-	}
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	start := time.Now()
-	for _, benchmarkAccount := range ba {
-		if err := benchmarkAccount.Update(ctx, tx, setter); err != nil {
-			return tx.Rollback(ctx)
-		}
-	}
-	fmt.Printf("In Transaction, took %s\n", time.Since(start))
-	return tx.Commit(ctx)
-}
-
-func bulkUpdate(ba models.BenchmarkAccountSlice, db bob.DB, ctx context.Context) error {
-	setter := models.BenchmarkAccountSetter{
-		Status: omit.From("active"),
-	}
-	if err := ba.UpdateAll(ctx, db, setter); err != nil {
-		return err
-	}
-	return nil
 }
