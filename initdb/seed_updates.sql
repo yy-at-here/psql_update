@@ -47,3 +47,8 @@ SELECT setval(
 -- Optional index to reflect typical lookup patterns
 CREATE INDEX IF NOT EXISTS idx_benchmark_accounts_status
     ON benchmark_accounts (status);
+
+-- Reset statistics to have clean measurements
+
+SELECT pg_stat_reset_shared('bgwriter');
+SELECT pg_stat_reset_shared('wal');
