@@ -34,9 +34,11 @@ var allModes = []string{
 }
 
 type Result struct {
-	Name     string
-	Duration time.Duration
-	Err      error
+	Name         string
+	Duration     time.Duration
+	WalSyncTime  float64
+	WalSyncCount int64
+	Err          error
 }
 
 func main() {
@@ -57,7 +59,14 @@ func newExecOnceCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := runOnce(cmd.Context(), mode)
 			if err == nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "[%s] seconds=%.6f\n", res.Name, res.Duration.Seconds())
+				fmt.Fprintf(
+					cmd.OutOrStdout(),
+					"[%s] seconds=%.6f wal_sync_time=%.3f wal_sync=%d\n",
+					res.Name,
+					res.Duration.Seconds(),
+					res.WalSyncTime,
+					res.WalSyncCount,
+				)
 			}
 			return err
 		},
@@ -99,10 +108,21 @@ func runOnce(ctx context.Context, mode string) (Result, error) {
 	}
 	defer db.Close()
 
+	if err := resetWalStats(ctx, db); err != nil {
+		return Result{}, err
+	}
+
 	res, err := runScenario(ctx, mode, db)
 	if err != nil {
 		return Result{}, err
 	}
+
+	walSyncTime, walSyncCount, err := fetchWalMetrics(ctx, db)
+	if err != nil {
+		return Result{}, err
+	}
+	res.WalSyncTime = walSyncTime
+	res.WalSyncCount = walSyncCount
 	return res, nil
 }
 
@@ -153,6 +173,8 @@ func runBenchmark(ctx context.Context) ([][]string, error) {
 
 	for _, mode := range allModes {
 		durations := make([]float64, 0, benchmarkRuns)
+		walSyncTimes := make([]float64, 0, benchmarkRuns)
+		walSyncCounts := make([]float64, 0, benchmarkRuns)
 
 		for run := 1; run <= benchmarkRuns; run++ {
 			res, err := runOnce(ctx, mode)
@@ -161,14 +183,75 @@ func runBenchmark(ctx context.Context) ([][]string, error) {
 			}
 			seconds := res.Duration.Seconds()
 			durations = append(durations, seconds)
-			records = append(records, []string{mode, strconv.Itoa(run), fmt.Sprintf("%.6f", seconds)})
+			walSyncTimes = append(walSyncTimes, res.WalSyncTime)
+			walSyncCounts = append(walSyncCounts, float64(res.WalSyncCount))
+			records = append(
+				records,
+				[]string{
+					mode,
+					strconv.Itoa(run),
+					fmt.Sprintf("%.6f", seconds),
+					fmt.Sprintf("%.3f", res.WalSyncTime),
+					strconv.FormatInt(res.WalSyncCount, 10),
+				},
+			)
 		}
 
-		avg := average(durations)
-		records = append(records, []string{mode, "avg", fmt.Sprintf("%.6f", avg)})
+		avgDuration := average(durations)
+		avgWalSyncTime := average(walSyncTimes)
+		avgWalSyncCount := average(walSyncCounts)
+		records = append(
+			records,
+			[]string{
+				mode,
+				"avg",
+				fmt.Sprintf("%.6f", avgDuration),
+				fmt.Sprintf("%.3f", avgWalSyncTime),
+				fmt.Sprintf("%.1f", avgWalSyncCount),
+			},
+		)
 	}
 
 	return records, nil
+}
+
+func resetWalStats(ctx context.Context, db bob.DB) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	_, err := db.ExecContext(ctx, "SELECT pg_stat_reset_shared('wal');")
+	return err
+}
+
+func fetchWalMetrics(ctx context.Context, db bob.DB) (float64, int64, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			COALESCE(wal_sync_time, 0),
+			COALESCE(wal_sync, 0)
+		FROM pg_stat_wal;
+	`)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, 0, err
+		}
+		return 0, 0, errors.New("pg_stat_wal returned no rows")
+	}
+
+	var walSyncTime float64
+	var walSyncCount int64
+	if err := rows.Scan(&walSyncTime, &walSyncCount); err != nil {
+		return 0, 0, err
+	}
+
+	return walSyncTime, walSyncCount, nil
 }
 
 func writeBenchmarkCSV(records [][]string, path string) error {
@@ -187,7 +270,7 @@ func writeBenchmarkCSV(records [][]string, path string) error {
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
-	if err := writer.Write([]string{"mode", "run", "elapsed_seconds"}); err != nil {
+	if err := writer.Write([]string{"mode", "run", "elapsed_seconds", "wal_sync_time", "wal_sync_count"}); err != nil {
 		return err
 	}
 	if err := writer.WriteAll(records); err != nil {
