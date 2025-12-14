@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,20 +18,23 @@ import (
 )
 
 const (
-	defaultMode         = "without-tx"
-	benchmarkRuns       = 5
-	benchmarkOutputPath = "output/go_sql_benchmark_results.csv"
-	postgresDriver      = "postgres"
-	defaultDatabaseURL  = "postgres://postgres:postgres@localhost:15432/app_db?sslmode=disable"
+	defaultMode           = "without-tx"
+	benchmarkRuns         = 5
+	benchmarkOutputDir    = "output"
+	benchmarkOutputPrefix = "go_sql_benchmark_results"
+	postgresDriver        = "postgres"
+	defaultDatabaseURL    = "postgres://postgres:postgres@localhost:15432/app_db?sslmode=disable"
 )
 
-var allModes = []string{
-	"without-tx",
-	"with-tx",
-	"with-multi-tx",
-	"bulk",
-	"raw-sql-with-tx",
-	"raw-sql-without-tx",
+var modeFunctionMap = map[string]func(models.BenchmarkAccountSlice, bob.DB, context.Context) error{
+	"without-tx":                 updateWithoutTx,
+	"with-tx":                    updateWithTx,
+	"with-multi-tx":              updateWithMultiTx,
+	"bulk":                       bulkUpdate,
+	"raw-sql-with-tx":            updateRawSQLWithTx,
+	"raw-sql-without-tx":         updateRawSQLWithoutTx,
+	"raw-sql-with-tx-prepare":    updateRawSQLWithTxPrepare,
+	"raw-sql-without-tx-prepare": updateRawSQLWithoutTxPrepare,
 }
 
 type Result struct {
@@ -86,10 +90,11 @@ func newBenchmarkCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := writeBenchmarkCSV(records, benchmarkOutputPath); err != nil {
+			outputPath := nextBenchmarkOutputPath()
+			if err := writeBenchmarkCSV(records, outputPath); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Wrote benchmark results to %s\n", benchmarkOutputPath)
+			fmt.Fprintf(cmd.OutOrStdout(), "Wrote benchmark results to %s\n", outputPath)
 			return nil
 		},
 	}
@@ -137,30 +142,15 @@ func runScenario(ctx context.Context, name string, db bob.DB) (Result, error) {
 	}
 
 	start := time.Now()
-
-	switch name {
-	case "without-tx":
-		err = updateWithoutTx(benchmarkAccounts, db, ctx)
-	case "with-tx":
-		err = updateWithTx(benchmarkAccounts, db, ctx)
-	case "with-multi-tx":
-		err = updateWithMultiTx(benchmarkAccounts, db, ctx)
-	case "bulk":
-		err = bulkUpdate(benchmarkAccounts, db, ctx)
-	case "raw-sql-with-tx":
-		err = updateRawSQLWithTx(benchmarkAccounts, db, ctx)
-	case "raw-sql-without-tx":
-		err = updateRawSQLWithoutTx(benchmarkAccounts, db, ctx)
-	default:
+	if _, ok := modeFunctionMap[name]; !ok {
 		return Result{}, fmt.Errorf("unknown mode: %s", name)
 	}
-
+	updateFunction := modeFunctionMap[name]
+	err = updateFunction(benchmarkAccounts, db, ctx)
 	duration := time.Since(start)
-
 	if err != nil {
 		return Result{Name: name, Duration: duration, Err: err}, err
 	}
-
 	return Result{Name: name, Duration: duration}, nil
 }
 
@@ -171,7 +161,7 @@ func runBenchmark(ctx context.Context) ([][]string, error) {
 
 	var records [][]string
 
-	for _, mode := range allModes {
+	for mode := range maps.Keys(modeFunctionMap) {
 		durations := make([]float64, 0, benchmarkRuns)
 		walSyncTimes := make([]float64, 0, benchmarkRuns)
 		walSyncCounts := make([]float64, 0, benchmarkRuns)
@@ -213,6 +203,12 @@ func runBenchmark(ctx context.Context) ([][]string, error) {
 	}
 
 	return records, nil
+}
+
+func nextBenchmarkOutputPath() string {
+	timestamp := time.Now().Format("20060102150405")
+	filename := fmt.Sprintf("%s_%s.csv", benchmarkOutputPrefix, timestamp)
+	return filepath.Join(benchmarkOutputDir, filename)
 }
 
 func resetWalStats(ctx context.Context, db bob.DB) error {
