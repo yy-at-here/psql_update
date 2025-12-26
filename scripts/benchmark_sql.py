@@ -16,11 +16,14 @@ SQL_DIR = ROOT / "sql"
 TARGET_FILES = [
     "update_10000_without_tx.sql",
     "update_10000_with_tx.sql",
+    "update_10000_with_tx_prepare.sql",
+    "update_10000_without_tx_prepare.sql",
     "update_10000_each_tx.sql",
     "bulk_update.sql",
 ]
 RUNS = 5
-OUTPUT = ROOT / "output" / "raw_sql_benchmark_results.csv"
+OUTPUT_DIR = ROOT / "output" / "csv"
+OUTPUT_PREFIX = "raw_sql_benchmark_results"
 DATABASE_URL_DEFAULT = "postgres://postgres:postgres@localhost:15432/app_db?sslmode=disable"
 
 
@@ -96,6 +99,11 @@ def run_case(sql_file: Path, database_url: str) -> list[tuple[float, float, int]
     return measurements
 
 
+def next_output_path() -> Path:
+    timestamp = time.strftime("%Y%m%d%H%M%S")
+    return OUTPUT_DIR / f"{OUTPUT_PREFIX}_{timestamp}.csv"
+
+
 def main() -> int:
     if not SQL_DIR.exists():
         raise SystemExit(f"sql directory not found at {SQL_DIR}")
@@ -121,13 +129,14 @@ def main() -> int:
         avg_wal_sync = statistics.mean(wal_sync_counts)
         records.append((filename, "avg", avg_elapsed, avg_wal_sync_time, avg_wal_sync))
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    with OUTPUT.open("w", newline="") as fh:
+    output_path = next_output_path()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow(["file", "run", "elapsed_seconds", "wal_sync_time", "wal_sync_count"])
         writer.writerows(records)
 
-    print(f"Wrote results to {OUTPUT}")
+    print(f"Wrote results to {output_path}")
     return 0
 
 

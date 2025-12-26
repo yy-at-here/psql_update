@@ -98,8 +98,12 @@ func updateRawSQLWithTxPrepare(ba models.BenchmarkAccountSlice, db bob.DB, ctx c
 
 	start := time.Now()
 	stmt, err := tx.PrepareContext(ctx, "UPDATE benchmark_accounts SET status = 'active' WHERE id = $1")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
 	for _, benchmarkAccount := range ba {
-		if _, err := stmt.QueryContext(ctx, benchmarkAccount.ID); err != nil {
+		if _, err := stmt.ExecContext(ctx, benchmarkAccount.ID); err != nil {
 			return tx.Rollback(ctx)
 		}
 	}
@@ -124,11 +128,9 @@ func updateRawSQLWithoutTxPrepare(ba models.BenchmarkAccountSlice, db bob.DB, ct
 	if stmt, err = db.PrepareContext(ctx, "UPDATE benchmark_accounts SET status = 'active' WHERE id = $1"); err != nil {
 		return err
 	}
+	defer stmt.Close()
 	for _, benchmarkAccount := range ba {
-		if _, err := stmt.QueryContext(ctx,
-			"UPDATE benchmark_accounts SET status = 'active' WHERE id = $1",
-			benchmarkAccount.ID,
-		); err != nil {
+		if _, err := stmt.ExecContext(ctx, benchmarkAccount.ID); err != nil {
 			return err
 		}
 	}

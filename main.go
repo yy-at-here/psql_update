@@ -5,11 +5,17 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"net/http"
+	_ "net/http/pprof"
+
+	"github.com/felixge/fgprof"
 
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
@@ -135,6 +141,10 @@ func runScenario(ctx context.Context, name string, db bob.DB) (Result, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
+	go func() {
+		log.Println(http.ListenAndServe(":6060", nil))
+	}()
 
 	benchmarkAccounts, err := models.BenchmarkAccounts.Query().All(ctx, db)
 	if err != nil {

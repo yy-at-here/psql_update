@@ -1,3 +1,6 @@
+-- create pg_stat_statements extension
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
 -- Seed data for PostgreSQL update benchmark scenarios
 -- This script is idempotent and can be rerun to reset the benchmark dataset.
 
@@ -52,3 +55,4 @@ CREATE INDEX IF NOT EXISTS idx_benchmark_accounts_status
 
 SELECT pg_stat_reset_shared('bgwriter');
 SELECT pg_stat_reset_shared('wal');
+SELECT pg_stat_statements_reset();
