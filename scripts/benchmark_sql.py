@@ -45,7 +45,12 @@ def get_database_url() -> str:
     return f"postgres://{user}:{encoded_password}@{endpoint}/{db}?sslmode={sslmode}"
 
 
-def _run_psql_command(database_url: str, sql: str) -> str:
+def _run_psql_command(database_url: str, sql: str, ignore_error: bool = False) -> tuple[str, bool]:
+    """
+    psql コマンドを実行する。
+    戻り値: (出力, 成功したか)
+    ignore_error=True の場合、エラーでも終了せずに (出力, False) を返す
+    """
     proc = subprocess.run(
         [
             "psql",
@@ -62,31 +67,49 @@ def _run_psql_command(database_url: str, sql: str) -> str:
         check=False,
     )
     if proc.returncode != 0:
+        if ignore_error:
+            return proc.stderr.strip(), False
         if proc.stderr:
             sys.stderr.write(proc.stderr)
         raise SystemExit(proc.returncode)
-    return proc.stdout.strip()
+    return proc.stdout.strip(), True
 
 
-def reset_wal_stats(database_url: str) -> None:
-    _run_psql_command(database_url, "SELECT pg_stat_reset_shared('wal');")
+def reset_wal_stats(database_url: str) -> bool:
+    """WAL 統計をリセット。成功したら True、失敗したら False"""
+    _, success = _run_psql_command(
+        database_url,
+        "SELECT pg_stat_reset_shared('wal');",
+        ignore_error=True,
+    )
+    if not success:
+        print("Warning: failed to reset WAL stats (may not be supported on Aurora)", file=sys.stderr)
+    return success
 
 
-def fetch_wal_metrics(database_url: str) -> tuple[float, int]:
-    result = _run_psql_command(
+def fetch_wal_metrics(database_url: str) -> tuple[float, int] | None:
+    """WAL メトリクスを取得。失敗したら None を返す"""
+    result, success = _run_psql_command(
         database_url,
         "SELECT wal_sync_time, wal_sync FROM pg_stat_wal;",
+        ignore_error=True,
     )
+    if not success:
+        print("Warning: failed to fetch WAL metrics (may not be supported on Aurora)", file=sys.stderr)
+        return None
     parts = [item.strip() for item in result.split("|") if item.strip()]
     if len(parts) != 2:
-        raise SystemExit(f"Failed to parse wal metrics from output: {result!r}")
+        print(f"Warning: failed to parse WAL metrics from output: {result!r}", file=sys.stderr)
+        return None
     wal_sync_time_str, wal_sync_str = parts
     try:
         return float(wal_sync_time_str), int(wal_sync_str)
     except ValueError:
-        raise SystemExit(
-            f"Failed to convert wal metrics to numbers: time={wal_sync_time_str!r}, sync={wal_sync_str!r}"
+        print(
+            f"Warning: failed to convert WAL metrics to numbers: time={wal_sync_time_str!r}, sync={wal_sync_str!r}",
+            file=sys.stderr,
         )
+        return None
 
 
 def run_case(sql_file: Path, database_url: str) -> list[tuple[float, float, int]]:
@@ -111,7 +134,11 @@ def run_case(sql_file: Path, database_url: str) -> list[tuple[float, float, int]
             if proc.stderr:
                 sys.stderr.write(proc.stderr)
             raise SystemExit(proc.returncode)
-        wal_sync_time, wal_sync = fetch_wal_metrics(database_url)
+        wal_metrics = fetch_wal_metrics(database_url)
+        if wal_metrics is not None:
+            wal_sync_time, wal_sync = wal_metrics
+        else:
+            wal_sync_time, wal_sync = 0.0, 0
         measurements.append((elapsed, wal_sync_time, wal_sync))
         reset_wal_stats(database_url)
     return measurements

@@ -121,7 +121,7 @@ func runOnce(ctx context.Context, mode string) (Result, error) {
 	defer db.Close()
 
 	if err := resetWalStats(ctx, db); err != nil {
-		return Result{}, err
+		log.Printf("Warning: failed to reset WAL stats (may not be supported): %v", err)
 	}
 
 	res, err := runScenario(ctx, mode, db)
@@ -131,10 +131,11 @@ func runOnce(ctx context.Context, mode string) (Result, error) {
 
 	walSyncTime, walSyncCount, err := fetchWalMetrics(ctx, db)
 	if err != nil {
-		return Result{}, err
+		log.Printf("Warning: failed to fetch WAL metrics (may not be supported): %v", err)
+	} else {
+		res.WalSyncTime = walSyncTime
+		res.WalSyncCount = walSyncCount
 	}
-	res.WalSyncTime = walSyncTime
-	res.WalSyncCount = walSyncCount
 	return res, nil
 }
 
