@@ -52,6 +52,14 @@ type Result struct {
 	Err          error
 }
 
+func init() {
+	// fgprof ハンドラーを一度だけ登録
+	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
+	go func() {
+		log.Println(http.ListenAndServe(":6060", nil))
+	}()
+}
+
 func main() {
 	rootCmd := &cobra.Command{Use: "app"}
 	rootCmd.AddCommand(newExecOnceCommand(), newBenchmarkCommand())
@@ -143,10 +151,6 @@ func runScenario(ctx context.Context, name string, db bob.DB) (Result, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
-	go func() {
-		log.Println(http.ListenAndServe(":6060", nil))
-	}()
 
 	benchmarkAccounts, err := models.BenchmarkAccounts.Query().All(ctx, db)
 	if err != nil {
