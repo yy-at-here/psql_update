@@ -16,5 +16,11 @@ psql-ec2:
 bob-generate:
 	DATABASE_URL=$(DATABASE_URL) bob generate
 
-seed-db:
+seed-db-local:
 	cat initdb/seed_updates.sql | $(COMPOSE_CMD) exec -T postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+
+seed-db-ec2:
+	cat initdb/seed_updates.sql | psql -h $(POSTGRES_ENDPOINT) -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+
+get-aurora-password:
+	@./scripts/get_aurora_password.sh
