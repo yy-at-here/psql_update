@@ -1,4 +1,5 @@
 include .env
+export
 
 .PHONY: psql bob-generate seed-db
 
