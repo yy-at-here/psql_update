@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
 SQL_DIR = ROOT / "sql"
 TARGET_FILES = [
+    "roundtrip.sql",
     "update_10000_without_tx.sql",
     "update_10000_with_tx.sql",
     "update_10000_with_tx_prepare.sql",
