@@ -6,6 +6,7 @@ require (
 	github.com/aarondl/opt v0.0.0-20250607033636-982744e1bd65
 	github.com/felixge/fgprof v0.9.5
 	github.com/jaswdr/faker/v2 v2.9.0
+	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/shopspring/decimal v1.4.0
 	github.com/spf13/cobra v1.10.2

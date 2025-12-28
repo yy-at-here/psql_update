@@ -6,7 +6,7 @@ services:
       - "15432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGPASSWORD: ${PGPASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-app_db}
       TZ: ${TZ:-Asia/Tokyo}
     volumes:

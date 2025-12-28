@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
@@ -24,7 +25,19 @@ TARGET_FILES = [
 RUNS = 5
 OUTPUT_DIR = ROOT / "output" / "csv"
 OUTPUT_PREFIX = "raw_sql_benchmark_results"
-DATABASE_URL_DEFAULT = "postgres://postgres:postgres@localhost:15432/app_db?sslmode=disable"
+
+
+def get_database_url() -> str:
+    """環境変数から DATABASE_URL 組み立てる"""
+    dotenv_path = os.path.join(ROOT, '.env')
+    load_dotenv(dotenv_path=dotenv_path)
+
+    user = os.environ.get("POSTGRES_USER", "postgres")
+    password = os.environ.get("PGPASSWORD", "postgres")
+    endpoint = os.environ.get("POSTGRES_ENDPOINT", "localhost:15432")
+    db = os.environ.get("POSTGRES_DB", "app_db")
+
+    return f"postgres://{user}:{password}@{endpoint}/{db}?sslmode=disable"
 
 
 def _run_psql_command(database_url: str, sql: str) -> str:
@@ -110,7 +123,7 @@ def main() -> int:
     if shutil.which("psql") is None:
         raise SystemExit("psql command not found in PATH")
 
-    database_url = os.environ.get("DATABASE_URL", DATABASE_URL_DEFAULT)
+    database_url = get_database_url()
 
     records: list[tuple[str, str, float, float, int]] = []
 

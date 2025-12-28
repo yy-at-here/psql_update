@@ -17,6 +17,7 @@ import (
 
 	"github.com/felixge/fgprof"
 
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
 	"github.com/stephenafamo/bob"
@@ -29,7 +30,6 @@ const (
 	benchmarkOutputDir    = "output"
 	benchmarkOutputPrefix = "go_sql_benchmark_results"
 	postgresDriver        = "postgres"
-	defaultDatabaseURL    = "postgres://postgres:postgres@localhost:15432/app_db?sslmode=disable"
 )
 
 var modeFunctionMap = map[string]func(models.BenchmarkAccountSlice, bob.DB, context.Context) error{
@@ -113,7 +113,7 @@ func runOnce(ctx context.Context, mode string) (Result, error) {
 		ctx = context.Background()
 	}
 
-	db, err := bob.Open(postgresDriver, defaultDatabaseURL)
+	db, err := bob.Open(postgresDriver, getDatabaseURL())
 	if err != nil {
 		return Result{}, err
 	}
@@ -295,4 +295,22 @@ func average(values []float64) float64 {
 		total += v
 	}
 	return total / float64(len(values))
+}
+
+func getDatabaseURL() string {
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		return url
+	}
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	user := os.Getenv("POSTGRES_USER")
+	password := os.Getenv("PGPASSWORD")
+	endpoint := os.Getenv("POSTGRES_ENDPOINT")
+	db := os.Getenv("POSTGRES_DB")
+
+	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", user, password, endpoint, db)
 }

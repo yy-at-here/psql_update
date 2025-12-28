@@ -7,7 +7,9 @@ authors = [
     { name = "ichikawa" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "python-dotenv>=1.2.1",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.16,<0.10.0"]
