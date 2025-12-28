@@ -88,6 +88,43 @@ def reset_wal_stats(database_url: str) -> bool:
     return success
 
 
+def reset_stats(database_url: str) -> bool:
+    """統計情報をリセット。失敗しても処理は続行する"""
+    _, success = _run_psql_command(
+        database_url,
+        "SELECT pg_stat_reset();",
+        ignore_error=True,
+    )
+    if not success:
+        print("Warning: failed to reset stats (pg_stat_reset)", file=sys.stderr)
+    return success
+
+
+def fetch_commit_latency_ms(database_url: str, datname: str) -> int | None:
+    """aurora_stat_get_db_commit_latency を ms(切り捨て)で取得。失敗時は None。"""
+    sql = (
+        "SELECT aurora_stat_get_db_commit_latency(oid) "
+        f"FROM pg_database WHERE datname='{datname}';"
+    )
+    result, success = _run_psql_command(database_url, sql, ignore_error=True)
+    if not success:
+        print(
+            "Warning: failed to fetch commit latency (aurora_stat_get_db_commit_latency may be unsupported)",
+            file=sys.stderr,
+        )
+        return None
+
+    result = result.strip()
+    if not result:
+        return None
+    try:
+        micros = int(float(result))
+    except ValueError:
+        print(f"Warning: failed to parse commit latency: {result!r}", file=sys.stderr)
+        return None
+    return micros // 1000
+
+
 def fetch_wal_metrics(database_url: str) -> tuple[float, int] | None:
     """WAL メトリクスを取得。失敗したら None を返す"""
     result, success = _run_psql_command(
@@ -113,9 +150,10 @@ def fetch_wal_metrics(database_url: str) -> tuple[float, int] | None:
         return None
 
 
-def run_case(sql_file: Path, database_url: str) -> list[tuple[float, float, int]]:
-    measurements: list[tuple[float, float, int]] = []
+def run_case(sql_file: Path, database_url: str, dbname: str) -> list[tuple[float, float, int, int | None]]:
+    measurements: list[tuple[float, float, int, int | None]] = []
     reset_wal_stats(database_url)
+    reset_stats(database_url)
     for _ in range(RUNS):
         start = time.perf_counter()
         proc = subprocess.run(
@@ -135,13 +173,17 @@ def run_case(sql_file: Path, database_url: str) -> list[tuple[float, float, int]
             if proc.stderr:
                 sys.stderr.write(proc.stderr)
             raise SystemExit(proc.returncode)
+
         wal_metrics = fetch_wal_metrics(database_url)
         if wal_metrics is not None:
             wal_sync_time, wal_sync = wal_metrics
         else:
             wal_sync_time, wal_sync = 0.0, 0
-        measurements.append((elapsed, wal_sync_time, wal_sync))
+
+        commit_latency_ms = fetch_commit_latency_ms(database_url, dbname)
+        measurements.append((elapsed, wal_sync_time, wal_sync, commit_latency_ms))
         reset_wal_stats(database_url)
+        reset_stats(database_url)
     return measurements
 
 
@@ -157,29 +199,32 @@ def main() -> int:
         raise SystemExit("psql command not found in PATH")
 
     database_url = get_database_url()
+    dbname = os.environ.get("POSTGRES_DB", "app_db")
 
-    records: list[tuple[str, str, float, float, int]] = []
+    records: list[tuple[str, str, float, float, int, int]] = []
 
     for filename in TARGET_FILES:
         sql_path = SQL_DIR / filename
         if not sql_path.exists():
             raise SystemExit(f"SQL file not found: {sql_path}")
-        measurements = run_case(sql_path, database_url)
+        measurements = run_case(sql_path, database_url, dbname)
         elapsed_values = [item[0] for item in measurements]
         wal_sync_time_values = [item[1] for item in measurements]
         wal_sync_counts = [item[2] for item in measurements]
-        for idx, (elapsed, wal_sync_time, wal_sync) in enumerate(measurements, start=1):
-            records.append((filename, str(idx), elapsed, wal_sync_time, wal_sync))
+        commit_latency_values = [item[3] for item in measurements if item[3] is not None]
+        for idx, (elapsed, wal_sync_time, wal_sync, commit_latency_ms) in enumerate(measurements, start=1):
+            records.append((filename, str(idx), elapsed, wal_sync_time, wal_sync, commit_latency_ms or 0))
         avg_elapsed = statistics.mean(elapsed_values)
         avg_wal_sync_time = statistics.mean(wal_sync_time_values)
         avg_wal_sync = statistics.mean(wal_sync_counts)
-        records.append((filename, "avg", avg_elapsed, avg_wal_sync_time, avg_wal_sync))
+        avg_commit_latency_ms = statistics.mean(commit_latency_values) if commit_latency_values else 0
+        records.append((filename, "avg", avg_elapsed, avg_wal_sync_time, avg_wal_sync, int(avg_commit_latency_ms)))
 
     output_path = next_output_path()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["file", "run", "elapsed_seconds", "wal_sync_time", "wal_sync_count"])
+        writer.writerow(["file", "run", "elapsed_seconds", "wal_sync_time", "wal_sync_count", "commit_latency_ms"])
         writer.writerows(records)
 
     print(f"Wrote results to {output_path}")

@@ -56,3 +56,4 @@ CREATE INDEX IF NOT EXISTS idx_benchmark_accounts_status
 SELECT pg_stat_reset_shared('bgwriter');
 SELECT pg_stat_reset_shared('wal');
 SELECT pg_stat_statements_reset();
+SELECT pg_stat_reset();
