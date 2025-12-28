@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -298,9 +299,6 @@ func average(values []float64) float64 {
 }
 
 func getDatabaseURL() string {
-	if url := os.Getenv("DATABASE_URL"); url != "" {
-		return url
-	}
 
 	err := godotenv.Load()
 	if err != nil {
@@ -311,6 +309,13 @@ func getDatabaseURL() string {
 	password := os.Getenv("PGPASSWORD")
 	endpoint := os.Getenv("POSTGRES_ENDPOINT")
 	db := os.Getenv("POSTGRES_DB")
+	sslmode := os.Getenv("PGSSLMODE")
+	if sslmode == "" {
+		sslmode = "disable"
+	}
 
-	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", user, password, endpoint, db)
+	// パスワードに特殊文字が含まれる場合に備えて URL エンコード
+	encodedPassword := url.QueryEscape(password)
+
+	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", user, encodedPassword, endpoint, db, sslmode)
 }

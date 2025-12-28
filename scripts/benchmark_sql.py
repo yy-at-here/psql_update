@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,8 +37,12 @@ def get_database_url() -> str:
     password = os.environ.get("PGPASSWORD", "postgres")
     endpoint = os.environ.get("POSTGRES_ENDPOINT", "localhost:15432")
     db = os.environ.get("POSTGRES_DB", "app_db")
+    sslmode = os.environ.get("PGSSLMODE", "disable")
 
-    return f"postgres://{user}:{password}@{endpoint}/{db}?sslmode=disable"
+    # パスワードに特殊文字が含まれる場合に備えて URL エンコード
+    encoded_password = quote_plus(password)
+
+    return f"postgres://{user}:{encoded_password}@{endpoint}/{db}?sslmode={sslmode}"
 
 
 def _run_psql_command(database_url: str, sql: str) -> str:
