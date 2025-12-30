@@ -67,6 +67,7 @@ resource "aws_rds_cluster" "aurora-cluster" {
   master_username     = "postgres"
   database_name       = "app_db"
   skip_final_snapshot = true
+  deletion_protection = false # destroy時に削除を許可
 
   # パスワードを AWS Secrets Manager で自動管理
   manage_master_user_password = true
@@ -78,11 +79,13 @@ resource "aws_rds_cluster" "aurora-cluster" {
 resource "aws_rds_cluster_instance" "aurora-instance" {
   identifier         = "psql-update-aurora-instance"
   cluster_identifier = aws_rds_cluster.aurora-cluster.id
+  availability_zone  = aws_subnet.private-subnet-aurora-a.availability_zone
 
   # エンジン、バージョン、インスタンスタイプの設定
-  instance_class = "db.r6g.large"
-  engine         = aws_rds_cluster.aurora-cluster.engine
-  engine_version = aws_rds_cluster.aurora-cluster.engine_version
+  instance_class    = "db.r6g.large"
+  engine            = aws_rds_cluster.aurora-cluster.engine
+  engine_version    = aws_rds_cluster.aurora-cluster.engine_version
+  apply_immediately = true # 変更・削除を即時反映
 
   tags = {
     Name = "psql-update-aurora-instance-1"
