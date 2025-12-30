@@ -25,3 +25,8 @@ seed-db-ec2:
 
 get-aurora-password:
 	@./scripts/get_aurora_password.sh
+
+create-ec2-env:
+	echo 'POSTGRES_USER="postgres"' > .env
+	echo 'POSTGRES_DB="app_db"' >> .env
+	echo 'POSTGRES_ENDPOINT="aurora.local:5432"' >> .env

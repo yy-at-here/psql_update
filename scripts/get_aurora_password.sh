@@ -1,9 +1,13 @@
 #!/bin/bash
-# Aurora のマスターパスワードを Secrets Manager から取得するスクリプト
+# Aurora のマスターパスワードを Secrets Manager から取得し、.pgpass 形式で出力するスクリプト
 
 set -e
 
 CLUSTER_ID="${1:-psql-update-aurora-cluster}"
+HOST="${2:-aurora.local}"
+PORT="${3:-5432}"
+DB="${4:-app_db}"
+USER="${5:-postgres}"
 
 # Secret ARN を取得
 SECRET_ARN=$(aws rds describe-db-clusters \
@@ -17,7 +21,10 @@ if [ -z "$SECRET_ARN" ] || [ "$SECRET_ARN" = "None" ]; then
 fi
 
 # パスワードを取得
-aws secretsmanager get-secret-value \
+PASSWORD=$(aws secretsmanager get-secret-value \
   --secret-id "$SECRET_ARN" \
   --query SecretString \
-  --output text | jq -r '.password'
+  --output text | jq -r '.password')
+
+# .pgpass 形式で出力
+echo "${HOST}:${PORT}:${DB}:${USER}:${PASSWORD}"
