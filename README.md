@@ -36,24 +36,24 @@ make seed-db-local # テーブル作成
 以下の env ファイルを、`psql_update` 直下に配置してください。
 
 ```bash
-DB_HOST=localhost
-DB_PORT=15432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=app_db
+POSTGRES_ENDPOINT=localhost:15432
+POSTGRES_USER=postgres
+POSTGRES_DB=app_db
+PGPASSWORD=postgres
 ```
 
 ### AWS 上に環境を構築する
 
 以下のような環境を作成します。
 
-![インフラ構成図](terraform/infrastructure.png)
+![インフラ構成図](terraform/infrastructure_same_az.png)
 
 #### 1. Terraform で環境を構築
 
 ```bash
 cd terraform
 terraform init
+terraform plan
 terraform apply
 ```
 
@@ -73,29 +73,39 @@ $ sudo su - ec2-user
 
 #### 3. Aurora への接続設定
 
-EC2 上で `.env` ファイルを作成します。
+EC2 上で `.pgpass` ファイルと `.env` ファイルを作成します。
+
+まず、ローカル環境で pgpass に記載するテキストを取得してください。
 
 ```bash
 cd ~/psql_update
 
 # Aurora のエンドポイントを取得（ローカルPCで実行）
-aws rds describe-db-clusters \
+AURORA_ENDPOINT=$(aws rds describe-db-clusters \
   --db-cluster-identifier psql-update-aurora-cluster \
   --query 'DBClusters[0].Endpoint' \
-  --output text
+  --output text)
 
-# Aurora のパスワードを取得（ローカルPCで実行）
-./scripts/get_aurora_password.sh
+# Aurora 接続情報を .pgpass 形式で取得する
+./scripts/get_aurora_password.sh "$AURORA_ENDPOINT" > ~/.pgpass
+chmod 600 ~/.pgpass
 ```
 
-取得した情報を元に、EC2 上で以下のような `.env` ファイルを作成してください。
+取得したテキストを用い、EC2 上で `.pgpass` ファイルを作成します。
 
 ```bash
-DB_HOST=aurora.local
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=<取得したパスワード>
-DB_NAME=app_db
+# EC2 上で実行
+[取得したテキスト] > ~/.pgpass
+chmod 600 ~/.pgpass
+```
+
+また、EC2 上で以下のような `.env` ファイルを作成してください。
+
+```bash
+# ~/psql_update/.env
+POSTGRES_ENDPOINT=aurora.local:5432
+POSTGRES_USER=postgres
+POSTGRES_DB=app_db
 ```
 
 #### 4. DB の初期化
@@ -105,7 +115,7 @@ cd ~/psql_update
 make seed-db-ec2
 ```
 
-#### 5. 環境の削除
+### AWS 環境の削除方法
 
 基本的には terraform destroy でまとめて削除できます。
 
