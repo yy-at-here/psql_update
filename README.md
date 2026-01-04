@@ -99,7 +99,7 @@ chmod 600 ~/.pgpass
 chmod 600 ~/.pgpass
 ```
 
-また、EC2 上で以下のような `.env` ファイルを作成してください。
+EC2 上で以下のような `.env` ファイルを作成してください。
 
 ```bash
 # ~/psql_update/.env
@@ -108,7 +108,14 @@ POSTGRES_USER=postgres
 POSTGRES_DB=app_db
 ```
 
+以下の make コマンドで DB に接続できれば ok です。
+```bash
+make psql-ec2
+```
+
 #### 4. DB の初期化
+
+以下コマンドで DB に接続してください。
 
 ```bash
 cd ~/psql_update
