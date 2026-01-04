@@ -46,7 +46,7 @@ PGPASSWORD=postgres
 
 以下のような環境を作成します。
 
-![インフラ構成図](terraform/infrastructure_same_az.png)
+![インフラ構成図](terraform/infra_images/infrastructure_same_az.png)
 
 #### 1. Terraform で環境を構築
 
